@@ -2528,7 +2528,20 @@ applyOriginalValueDefaults (MatchIfThenResult b e m) (Just (MatchOrResult b' e' 
 applyOriginalValueDefaults (MatchNoneResult _) (Just (MatchNoneResult v)) = l
   where
     l = (MatchNoneResult v)
-applyOriginalValueDefaults x _ = x
+--applyOriginalValueDefaults x _ = error "not implemented"
+applyOriginalValueDefaults (MatchObjectFullResult _ _) Nothing = error $ "1"
+applyOriginalValueDefaults (MatchObjectFullResult _ _) (Just _) = error $ "1"
+applyOriginalValueDefaults (MatchObjectPartialResult _ _) Nothing = error $ "1"
+applyOriginalValueDefaults (MatchObjectPartialResult _ _) (Just _) = error $ "1"
+applyOriginalValueDefaults (MatchObjectOptionalResult _ _) Nothing = error $ "1"
+applyOriginalValueDefaults (MatchObjectOptionalResult _ _) (Just _) = error $ "1"
+applyOriginalValueDefaults (MatchObjectWholeResult _) Nothing = error $ "1"
+applyOriginalValueDefaults (MatchObjectWholeResult _) (Just _) = error $ "1"
+applyOriginalValueDefaults (MatchRecordResultEmpty _) Nothing = error $ "1"
+applyOriginalValueDefaults (MatchRecordResultEmpty _) (Just _) = error $ "1"
+applyOriginalValueDefaults (MatchStringExactResult s) Nothing = (MatchStringExactResult s)
+applyOriginalValueDefaults (MatchStringExactResult s) (Just _) = (MatchStringExactResult s)
+
 
 -- The most useful
 -- Value -> MatchPattern -> MatchResult
@@ -2932,3 +2945,9 @@ main4 = do
 
   rr <- return $ (MatchSuccess $ applyOriginalValueDefaults (extractSuccess tr) (Just (extractSuccess r)))
   print $ rr
+
+
+
+f :: Int -> Int -> Int
+--f a b = a + b * 2
+f a b = f a b
