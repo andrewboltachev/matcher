@@ -37,6 +37,7 @@ library
       Logicore.Matcher.RS
       Logicore.Matcher.Utils
       Logicore.Matcher.ValueBaseFunctor
+      Pro
   other-modules:
       Paths_matcher
   hs-source-dirs:
@@ -58,6 +59,7 @@ library
     , hspec
     , lens
     , mongoDB
+    , profunctors
     , recursion-schemes
     , regex-tdfa >=1.3.2 && <1.4
     , scientific
@@ -96,6 +98,7 @@ executable matcher-exe
     , lens
     , matcher
     , mongoDB
+    , profunctors
     , recursion-schemes
     , regex-tdfa >=1.3.2 && <1.4
     , scientific
@@ -135,6 +138,7 @@ test-suite matcher-test
     , lens
     , matcher
     , mongoDB
+    , profunctors
     , recursion-schemes
     , regex-tdfa >=1.3.2 && <1.4
     , scientific

@@ -48,6 +48,7 @@ dependencies:
   - async
   - free
   - lens
+  - profunctors
 
 ghc-options:
   - -Wall
