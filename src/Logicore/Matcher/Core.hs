@@ -288,6 +288,8 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   -- advanced
                   | MatchLet (KeyMap MatchPattern) MatchPattern
                   | MatchVar T.Text
+                  -- process
+                  | MatchReplace MatchPattern MatchPattern
                     deriving (Generic, Eq, Show)
 
 matchObjectFull' o = MatchObjectFull $ KM.map KeyReq o
@@ -1201,6 +1203,10 @@ matchPattern' fa (MatchVar n) a = do
                   return ()
     Nothing -> matchFailure $ "non-existing var: " ++ n
   return $ MatchVarResultF n
+
+
+matchPattern' fa (MatchReplace m' m'') a = do
+  undefined
 
 -- default ca
 matchPattern' fa m a = noMatch ("bottom reached:\n" ++ (T.pack $ show m) ++ "\n" ++ (T.pack $ show a))
