@@ -60,6 +60,7 @@ ghc-options:
   - -Wmissing-home-modules
   - -Wpartial-fields
   - -Wredundant-constraints
+  - -fobject-code
 
 library:
   source-dirs: src
