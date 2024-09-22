@@ -990,16 +990,8 @@ matchPattern' fa (MatchArrayOr ms) (Array arr) = do
                  else StarNodeValue $ fmap CharNode r
   return $ MatchArrayContextFreeResultF $ SeqNode [inner]
 
-matchPattern' fa (MatchArray ms) (Array []) = do
-  return $ MatchArrayContextFreeResultF $ SeqNode [StarNodeEmpty $ Char $ ms]
-
-{-matchPattern' fa (MatchArray ms) (Array arr) = do
-  rEnv <- MatchStatusT $ do
-    v <- ask
-    return $ return v
-  rr <- liftIO $ mapConcurrently (\x -> ff1 fa ms rEnv x) arr
-  rr <- P.traverse (\x -> MatchStatusT $ ReaderT (const x)) rr
-  return $ MatchArrayContextFreeResultF $ SeqNode [StarNodeValue $ fmap CharNode rr]-}
+matchPattern' fa (MatchArray ms) (Array arr) = do
+  matchPattern' fa (MatchArrayContextFree (Star $ Char ms)) (Array arr)
 
 -- specific (aka exact)
 matchPattern' fa (MatchStringExact m) (String a) = if m == a then return $ MatchStringExactResultF a else noMatch ("string mismatch: expected " ++ (T.pack $ show m) ++ " but found " ++ (T.pack $ show a))
