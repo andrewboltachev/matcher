@@ -236,7 +236,7 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchObjectWithDefaults (KeyMap MatchPattern) (KeyMap Value)
                   | MatchObjectOnly (KeyMap MatchPattern)
                   | MatchObjectOptional (KeyMap MatchPattern) (KeyMap MatchPattern)
-                  | MatchObjectWhole MatchPattern
+                  | MatchObjectWhole (KeyMap MatchPattern)
                   | MatchRecord MatchPattern
                   | MatchOmitField Key MatchPattern -- think
                   | MatchSelectFields (V.Vector Key) MatchPattern -- think
@@ -842,7 +842,8 @@ matchPattern' fa (MatchObjectOptional m o) (Object a) = do
 matchPattern' fa (MatchObjectWhole m) (Object a) = do
   let f acc' (k, v) = do
           acc <- acc' -- (mm, dd)
-          rr <- fa m v
+          m' <- (m2mst (matchFailure $ "key not found " ++ (T.pack . show) k)) (KM.lookup k m)
+          rr <- fa m' v
           return $ (KM.insert k rr) acc
   mm <- L.foldl' f (return mempty) $ KM.toList a
   return $ MatchObjectWholeResultF mm
