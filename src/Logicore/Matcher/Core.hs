@@ -228,6 +228,30 @@ instance ToJSON a => ToJSON (ArrayValMatch a) where
 instance FromJSON a => FromJSON (ArrayValMatch a)
     -- No need to provide a parseJSON implementation.
 
+data ValueOrVar = VObject (KeyMap ValueOrVar)
+                | VArray (V.Vector ValueOrVar)
+                | VString !T.Text
+                | VNumber !Sci.Scientific
+                | VBool !Bool
+                | VNull
+                | VVar !T.Text
+                  deriving (Eq, Show, Generic)
+
+instance ToJSON ValueOrVar where
+    toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON ValueOrVar
+    -- No need to provide a parseJSON implementation.
+
+data VarDef p = LetVar p
+              | ConstVar ValueOrVar
+              | ApplyVar String (V.Vector Key) deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
+
+instance ToJSON a => ToJSON (VarDef a) where
+    toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON a => FromJSON (VarDef a)
+    -- No need to provide a parseJSON implementation.
 
 -- Match<What>[<How>], Match<What>[<How>]Result
 
@@ -287,6 +311,7 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchGetFromFile T.Text MatchPattern -- not sure
                   -- advanced
                   | MatchLet (KeyMap MatchPattern) MatchPattern
+                  | MatchLet2 (KeyMap (VarDef MatchPattern)) MatchPattern
                   | MatchVar T.Text
                   -- process
                   | MatchReplace MatchPattern MatchPattern
@@ -387,6 +412,7 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  | MatchFromRedisResult T.Text T.Text T.Text
                  -- advanced
                  | MatchLetResult (KeyMap MatchResult) MatchResult
+                 | MatchLet2Result (KeyMap MatchResult) MatchResult
                  | MatchVarResult T.Text
                    deriving (Generic, Eq, Show)
 
@@ -842,7 +868,7 @@ matchPattern' fa (MatchObjectOptional m o) (Object a) = do
 matchPattern' fa (MatchObjectWhole m) (Object a) = do
   let f acc' (k, v) = do
           acc <- acc' -- (mm, dd)
-          m' <- (m2mst (matchFailure $ "key not found " ++ (T.pack . show) k)) (KM.lookup k m)
+          m' <- (m2mst (noMatch $ "key not found " ++ (T.pack . show) k)) (KM.lookup k m)
           rr <- fa m' v
           return $ (KM.insert k rr) acc
   mm <- L.foldl' f (return mempty) $ KM.toList a
@@ -1149,6 +1175,36 @@ matchPattern' fa (MatchGetFromIORef m) v = do
   matchPattern' fa m vr
 
 matchPattern' fa (MatchLet ms m) a = do
+  varsBefore <- getMatcherState id
+  -- Check
+  let
+    s1 = S.fromList . KM.keys $ varsBefore
+    s2 = S.fromList . KM.keys $ ms
+    s3 = S.intersection s1 s2
+    in
+      if not (S.null s3)
+      then matchFailure $ "keys clash: " ++ (T.pack . show $ s3)
+      else return ()
+  -- Append new vars
+  putMatcherState id (KM.union varsBefore (KM.map Left ms))
+  -- Do action
+  r <- fa m a
+  -- Collect values
+  varsAfter <- getMatcherState id
+  let res = KM.filterWithKey (\k v -> (KM.member k ms) && isRight v) varsAfter
+  let
+    s1 = S.fromList . KM.keys $ ms
+    s2 = S.fromList . KM.keys $ res
+    s3 = S.difference s1 s2
+    in
+      if not (S.null s3)
+      then matchFailure $ "vars not assigned: " ++ (T.pack . show $ s3)
+      else return ()
+  -- Remove current (it's required to keep them, not remove)
+  putMatcherState id (KM.filterWithKey (\k _ -> not $ KM.member k ms) varsAfter)
+  return $ MatchLetResultF (fmap (fromRight undefined) res) r
+
+matchPattern' fa (MatchLet2 ms m) a = do
   varsBefore <- getMatcherState id
   -- Check
   let
