@@ -311,7 +311,6 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchGetFromFile T.Text MatchPattern -- not sure
                   -- advanced
                   | MatchLet (KeyMap MatchPattern) MatchPattern
-                  | MatchLet2 (KeyMap (VarDef MatchPattern)) MatchPattern
                   | MatchVar T.Text
                   -- process
                   | MatchReplace MatchPattern MatchPattern
@@ -514,6 +513,10 @@ emptyEnvValue = MatcherEnv { grammarMap = mempty, indexing = False }
 --emptyMatchState = MatchState { _matchVars = KM.empty }
 
 --makeLenses ''MatchState
+
+data VarsDef r = VarsDef { _regularVars :: (KeyMap (Either MatchPattern r)) } deriving (Eq, Show)
+
+makeLenses ''VarsDef
 
 newtype MatchStatusT s m a = MatchStatusT { runMatchStatusT :: StateT s (ReaderT MatcherEnv m) (MatchStatus a) }
 
@@ -756,11 +759,11 @@ matchString x y = if x == y then (return y) else (noMatch "no string match")
 --matchPattern' :: MonadIO m => (MatchResultF a -> MatchStatusT m a) -> MatchPattern -> Value -> MatchStatusT m (MatchResultF a)
 
 --type MatchWithState m r = 
-
+-- (KeyMap (Either MatchPattern r))
 matchPattern'
   :: (Show r, MonadIO m) =>
-     (MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern r)) m r)
-     -> MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern r)) m (MatchResultF r)
+     (MatchPattern -> Value -> MatchStatusT (VarsDef r) m r)
+     -> MatchPattern -> Value -> MatchStatusT (VarsDef r) m (MatchResultF r)
 
 --mObj :: Monad m => Bool -> KeyMap (ObjectKeyMatch MatchPattern) -> Object -> MatchStatusT m (KeyMap MatchPattern, KeyMap (ObjectKeyMatch MatchResult))
 mObj fa keepExt m a = do
@@ -1175,7 +1178,7 @@ matchPattern' fa (MatchGetFromIORef m) v = do
   matchPattern' fa m vr
 
 matchPattern' fa (MatchLet ms m) a = do
-  varsBefore <- getMatcherState id
+  varsBefore <- getMatcherState regularVars
   -- Check
   let
     s1 = S.fromList . KM.keys $ varsBefore
@@ -1186,11 +1189,11 @@ matchPattern' fa (MatchLet ms m) a = do
       then matchFailure $ "keys clash: " ++ (T.pack . show $ s3)
       else return ()
   -- Append new vars
-  putMatcherState id (KM.union varsBefore (KM.map Left ms))
+  putMatcherState regularVars (KM.union varsBefore (KM.map Left ms))
   -- Do action
   r <- fa m a
   -- Collect values
-  varsAfter <- getMatcherState id
+  varsAfter <- getMatcherState regularVars
   let res = KM.filterWithKey (\k v -> (KM.member k ms) && isRight v) varsAfter
   let
     s1 = S.fromList . KM.keys $ ms
@@ -1201,47 +1204,17 @@ matchPattern' fa (MatchLet ms m) a = do
       then matchFailure $ "vars not assigned: " ++ (T.pack . show $ s3)
       else return ()
   -- Remove current (it's required to keep them, not remove)
-  putMatcherState id (KM.filterWithKey (\k _ -> not $ KM.member k ms) varsAfter)
-  return $ MatchLetResultF (fmap (fromRight undefined) res) r
-
-matchPattern' fa (MatchLet2 ms m) a = do
-  varsBefore <- getMatcherState id
-  -- Check
-  let
-    s1 = S.fromList . KM.keys $ varsBefore
-    s2 = S.fromList . KM.keys $ ms
-    s3 = S.intersection s1 s2
-    in
-      if not (S.null s3)
-      then matchFailure $ "keys clash: " ++ (T.pack . show $ s3)
-      else return ()
-  -- Append new vars
-  putMatcherState id (KM.union varsBefore (KM.map Left ms))
-  -- Do action
-  r <- fa m a
-  -- Collect values
-  varsAfter <- getMatcherState id
-  let res = KM.filterWithKey (\k v -> (KM.member k ms) && isRight v) varsAfter
-  let
-    s1 = S.fromList . KM.keys $ ms
-    s2 = S.fromList . KM.keys $ res
-    s3 = S.difference s1 s2
-    in
-      if not (S.null s3)
-      then matchFailure $ "vars not assigned: " ++ (T.pack . show $ s3)
-      else return ()
-  -- Remove current (it's required to keep them, not remove)
-  putMatcherState id (KM.filterWithKey (\k _ -> not $ KM.member k ms) varsAfter)
+  putMatcherState regularVars (KM.filterWithKey (\k _ -> not $ KM.member k ms) varsAfter)
   return $ MatchLetResultF (fmap (fromRight undefined) res) r
 
 matchPattern' fa (MatchVar n) a = do
-  varsBefore <- getMatcherState id
+  varsBefore <- getMatcherState regularVars
   let k = K.fromText n
   case KM.lookup k varsBefore of
     Just varDef -> case varDef of
                 Left p -> do
                   r <- fa p a
-                  modifyMatcherState id (KM.insert k (Right r))
+                  modifyMatcherState regularVars (KM.insert k (Right r))
                   return ()
                 Right e -> do
                   {-p <- matchResultToPattern e
@@ -1262,7 +1235,7 @@ matchPattern' fa m a = noMatch ("bottom reached:\n" ++ (T.pack $ show m) ++ "\n"
 
 --matchPattern'' :: (Show r, MonadIO m) => (MatchResultF r -> MatchStatusT m r) -> MatchPattern -> Value -> MatchStatusT m r
 
-matchPattern'' :: (Show r, MonadIO m) => (MatchResultF r -> MatchStatusT (KeyMap (Either MatchPattern r)) m r) -> MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern r)) m r
+matchPattern'' :: (Show r, MonadIO m) => (MatchResultF r -> MatchStatusT (VarsDef r) m r) -> MatchPattern -> Value -> MatchStatusT (VarsDef r) m r
 matchPattern'' falg p v = let f a b = falg =<< matchPattern' f a b
                            in f p v
 
@@ -1544,15 +1517,16 @@ matchResultToPattern = cata go where
 -- ghci> matchResultToValue $ extract $ matchPatternI (MatchStringChars (MatchArrayContextFree (Seq [(Char (MatchStringExact "a")), (Star (Char (MatchStringExact "b")))]))) (String "abb")
 -- String "abb"
 
-matchResultToValue :: MonadIO m => MatchResult -> MatchStatusT (KeyMap Value) m Value
+matchResultToValue = undefined
+{-matchResultToValue :: MonadIO m => MatchResult -> MatchStatusT (KeyMap Value) m Value
 matchResultToValue = paraM goM
   where
     goM :: MonadIO m => MatchResultF (MatchResult, Value) -> MatchStatusT (KeyMap Value) m Value
     goM (MatchLetResultF m (a, _)) = do
-      modifyMatcherState id (KM.union (KM.map snd m))
+      modifyMatcherState regularVars (KM.union (KM.map snd m))
       matchResultToValue a
     goM (MatchVarResultF n) = do
-      vars <- getMatcherState id
+      vars <- getMatcherState regularVars
       liftIO $ print vars
       let value = fromJust $ KM.lookup (K.fromText n) vars
       return $ value
@@ -1614,7 +1588,7 @@ matchResultToValue = paraM goM
     go (MatchFunnelResultF r) = r
     go (MatchFunnelKeysResultF r) = Object r
     go (MatchFunnelKeysUResultF r) = Object r
-    go (MatchRefResultF ref r) = r
+    go (MatchRefResultF ref r) = r-}
 
 --matchResultToValue :: MatchResult -> Value
 --matchResultToValue r = runIdentity $ evalStateT (matchResultToValue' r) KM.empty

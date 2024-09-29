@@ -27,6 +27,7 @@ library
   exposed-modules:
       C1
       Data.Aeson.Bson
+      Logicore.Ex1
       Logicore.Matcher.Additional
       Logicore.Matcher.Core
       Logicore.Matcher.Examples
