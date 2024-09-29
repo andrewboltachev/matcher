@@ -514,9 +514,24 @@ emptyEnvValue = MatcherEnv { grammarMap = mempty, indexing = False }
 
 --makeLenses ''MatchState
 
-data VarsDef r = VarsDef { _regularVars :: (KeyMap (Either MatchPattern r)) } deriving (Eq, Show)
+data VarsDef r = VarsDef {
+  _regularVars :: (KeyMap (Either MatchPattern r)) } deriving (Eq, Show, Generic, Functor, Foldable, Traversable)
+
+
+instance Semigroup (VarsDef a) where
+  (<>) = error "foo"
+
+instance Monoid (VarsDef a) where
+  mempty = VarsDef { _regularVars = KM.empty }
+
+instance ToJSON a => ToJSON (VarsDef a) where
+    toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON a => FromJSON (VarsDef a)
 
 makeLenses ''VarsDef
+
+emptyVarsDef = VarsDef { _regularVars = KM.empty }
 
 newtype MatchStatusT s m a = MatchStatusT { runMatchStatusT :: StateT s (ReaderT MatcherEnv m) (MatchStatus a) }
 
@@ -1243,14 +1258,14 @@ traceFAlgebra :: MonadIO m => MatchResultF MatchResult -> MatchStatusT s m Match
 traceFAlgebra x = do
   let e = embed x
   liftIO $ print $ matchResultToPattern e
-  liftIO $ BL.putStr $ encode $ extract $ matchResultToValueI e
+  --liftIO $ BL.putStr $ encode $ extract $ matchResultToValueI e
   liftIO $ print ""
   liftIO $ print ""
   return $ e
 
 -- MatchResultF a2 -> a2
 -- TODO: better playaround with recursion schemes
-matchToFunnel :: MonadIO m => MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern (V.Vector Value))) m (V.Vector Value)
+matchToFunnel :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef (V.Vector Value)) m (V.Vector Value)
 matchToFunnel = matchPattern'' gatherFunnelFAlgebra
 
 shortenText :: T.Text -> T.Text
@@ -1272,15 +1287,15 @@ optimizeValue (Object km) = Object $ KM.map optimizeInner km
 optimizeValue (Array v) = Array $ V.map optimizeInner v
 optimizeValue x = x
 
-matchToFunnelOptimized :: MonadIO m => MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern (V.Vector Value))) m (V.Vector Value)
+matchToFunnelOptimized :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef (V.Vector Value)) m (V.Vector Value)
 matchToFunnelOptimized p v = do
   r <- matchToFunnel p v
   return $ V.map optimizeValue r
 
-matchPattern :: MonadIO m => MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern MatchResult)) m MatchResult
+matchPattern :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef MatchResult) m MatchResult
 matchPattern = matchPattern'' $ return . embed
 
-matchToThin :: MonadIO m => MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern (Maybe Value))) m (Maybe Value)
+matchToThin :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef (Maybe Value)) m (Maybe Value)
 matchToThin = matchPattern'' matchResultToThinValueFAlgebra
 
 -- Suggestions
@@ -1380,7 +1395,7 @@ arrayFunnelSuggestions funnelResult = r
     r = V.cons ("[*]", SimpleValueSuggestion $ MatchArray MatchAny) r'
 
 --matchToFunnelSuggestions :: MonadIO m => MatchPattern -> Value -> MatchStatusT m [(String, MatchPattern)]
-matchToFunnelSuggestions :: MonadIO m => MatchPattern -> Value -> MatchStatusT (KeyMap (Either MatchPattern (V.Vector Value))) m Value
+matchToFunnelSuggestions :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef (V.Vector Value)) m Value
 matchToFunnelSuggestions p v = do
   funnelResult <- (matchPattern'' gatherFunnelFAlgebra) p v 
   let typesVec = V.map getValueType funnelResult
@@ -1419,11 +1434,11 @@ matchToFunnelSuggestions p v = do
 --ff1 :: (MatchResultF r -> MatchStatusT m r) -> MatchPattern -> MatcherEnv -> Value -> IO (MatchStatus r)
 ff1
   :: (Show a, MonadIO m) =>
-     (MatchResultF a -> MatchStatusT (KeyMap (Either MatchPattern a)) m a)
+     (MatchResultF a -> MatchStatusT (VarsDef a) m a)
      -> MatchPattern -> MatcherEnv -> Value -> IO (m (MatchStatus a))
 ff1 fa ms rEnv x = do
     --print "foo"
-    x <- liftIO $ return $ runReaderT (evalStateT (runMatchStatusT $ matchPattern'' fa ms x) KM.empty) rEnv
+    x <- liftIO $ return $ runReaderT (evalStateT (runMatchStatusT $ matchPattern'' fa ms x) emptyVarsDef) rEnv
     return x
 
 --contextFreeGrammarResultToGrammar :: (MatchResult -> MatchPattern) -> (ContextFreeGrammarResult (ContextFreeGrammar MatchPattern) MatchResult) -> (ContextFreeGrammar MatchPattern)
