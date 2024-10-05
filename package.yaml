@@ -49,6 +49,9 @@ dependencies:
   - free
   - lens
   - profunctors
+  - inline-js
+  - inline-js-core
+  - inline-js-examples
 
 ghc-options:
   - -Wall

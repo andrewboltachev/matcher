@@ -28,6 +28,7 @@ library
       C1
       Data.Aeson.Bson
       Logicore.Ex1
+      Logicore.Ex2
       Logicore.Matcher.Additional
       Logicore.Matcher.Core
       Logicore.Matcher.Examples
@@ -59,6 +60,9 @@ library
     , free
     , hedis
     , hspec
+    , inline-js
+    , inline-js-core
+    , inline-js-examples
     , lens
     , mongoDB
     , profunctors
@@ -97,6 +101,9 @@ executable matcher-exe
     , free
     , hedis
     , hspec
+    , inline-js
+    , inline-js-core
+    , inline-js-examples
     , lens
     , matcher
     , mongoDB
@@ -137,6 +144,9 @@ test-suite matcher-test
     , free
     , hedis
     , hspec
+    , inline-js
+    , inline-js-core
+    , inline-js-examples
     , lens
     , matcher
     , mongoDB
