@@ -68,6 +68,7 @@ main = do
       , post "/pythonValueToExactGrammar" (fnEndpoint mkPythonValueToExactGrammar theRef)
       , post "/pythonModValueToGrammar" (fnEndpoint mkPythonModValueToGrammar theRef)
       , post "/valueToExactResult" (fnEndpoint mkValueToExactResult theRef)
+      , post "/valueToDescribePattern" (fnEndpoint mkValueToDescribePattern theRef)
       --, post "/pythonStep1" (fnEndpoint mkPythonStep1 theRef)
       --, post "/pythonStep2" (fnEndpoint mkPythonStep2 theRef)
       --, post "/pythonStep0" (fnEndpoint mkPythonStep0 theRef)
@@ -292,6 +293,13 @@ mkValueToExactResult :: (Object -> MatchStatusT (VarsDef MatchResult) IO Value)
 mkValueToExactResult e = do
   value <- (m2mst $ matchFailure "JSON root element must have value") $ KM.lookup (K.fromString "value") e
   output <- valueToExactResult value
+  outputValue <- (m2mst $ matchFailure "decode error") $ decode $ encode $ output
+  return $ Object $ (KM.fromList [(K.fromString "result", outputValue)])
+
+mkValueToDescribePattern :: (Object -> MatchStatusT (VarsDef MatchResult) IO Value)
+mkValueToDescribePattern e = do
+  value <- (m2mst $ matchFailure "JSON root element must have value") $ KM.lookup (K.fromString "value") e
+  output <- valueToDescribePattern value
   outputValue <- (m2mst $ matchFailure "decode error") $ decode $ encode $ output
   return $ Object $ (KM.fromList [(K.fromString "result", outputValue)])
 

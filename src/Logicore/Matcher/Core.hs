@@ -470,6 +470,26 @@ instance FromJSON MatchResult
 
 -- MatchPattern × Value -(matchPattern')-> MatchResult
 
+
+type DescribeObject = KM.KeyMap DescribePattern
+type DescribeArray = V.Vector DescribePattern
+
+data DescribePattern = DescribeObject !DescribeObject
+                     | DescribeArray !DescribeArray
+                     | DescribeString !T.Text
+                     | DescribeNumber !Sci.Scientific
+                     | DescribeBool !Bool
+                     | DescribeNull
+                       deriving (Eq, Read, Generic)
+
+makeBaseFunctor ''DescribePattern
+
+instance ToJSON DescribePattern where
+    toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON DescribePattern
+    -- No need to provide a parseJSON implementation.
+
 data MatchPath = ObjKey Key | ArrKey Int deriving (Generic, Eq, Show)
 
 -- MatchStatus
@@ -2597,6 +2617,19 @@ thinPatternWithDefaults r v = do
   let p = matchResultToPattern r
   vr <- thinPattern p v
   return $ applyOriginalValueDefaults vr (Just r)
+
+
+valueToDescribePattern :: MonadIO m => Value -> MatchStatusT s m DescribePattern
+valueToDescribePattern = cataM goM
+  where
+    goM x = return $ go x
+
+    go (ObjectF x) = DescribeObject x
+    go (ArrayF x) = DescribeArray x
+    go (StringF x) = DescribeString x
+    go (NumberF x) = DescribeNumber x
+    go (BoolF x) = DescribeBool x
+    go NullF = DescribeNull
 
 -- Match functions end
 
