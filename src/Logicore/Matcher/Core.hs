@@ -480,6 +480,14 @@ data DescribePattern = DescribeObject !DescribeObject
                      | DescribeNumber !Sci.Scientific
                      | DescribeBool !Bool
                      | DescribeNull
+                     -- "any" types
+                     | DescribeStringAny !T.Text
+                     | DescribeNumberAny !Sci.Scientific
+                     | DescribeBoolAny !Bool
+                     -- collection types
+                     | DescribeStar DescribePattern
+                     | DescribeOr (KM.KeyMap DescribePattern) Key
+                     | DescribeMayBe DescribePattern
                        deriving (Eq, Read, Generic)
 
 makeBaseFunctor ''DescribePattern
