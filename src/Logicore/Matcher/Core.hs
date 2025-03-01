@@ -1639,7 +1639,7 @@ matchResultToValue = paraM goM
 valueToExactGrammar :: Value -> MatchPattern
 valueToExactGrammar = cata go
   where
-    go (ObjectF a) = MatchObjectWithDefaults a mempty
+    go (ObjectF a) = MatchObjectWhole a
     go (ArrayF a) = MatchArrayContextFree $ Seq $ fmap Char a
     go (StringF a) = MatchStringExact a
     go (NumberF a) = MatchNumberExact a
