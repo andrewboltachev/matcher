@@ -1047,7 +1047,6 @@ matchPattern' fa (MatchAnd ms' ms) v = do
   s <- fa ms v
   return $ MatchAndResultF s' s
 
-
 matchPattern' fa (MatchArrayOr ms) (Array arr) = do
   let h acc' e = do
         acc <- acc'
@@ -1353,7 +1352,7 @@ objectKeysBreakdown funnelResult = (requiredKeys, optionalKeys)
 
     keysMap = V.foldl f (fromList []) funnelResult
 
-    m = P.maximum $ KM.elems keysMap
+    m = V.length funnelResult
 
     requiredKeys = KM.keys $ KM.filter (== m) keysMap
     optionalKeys = KM.keys $ KM.filter (/= m) keysMap
