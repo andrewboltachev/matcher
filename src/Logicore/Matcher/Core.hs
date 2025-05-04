@@ -556,7 +556,7 @@ data VarsDef r = VarsDef {
 
 
 instance Semigroup (VarsDef a) where
-  (<>) = error "foo"
+  (<>) = error "<> not implemented for VarsDef"
 
 instance Monoid (VarsDef a) where
   mempty = VarsDef { _regularVars = KM.empty }
