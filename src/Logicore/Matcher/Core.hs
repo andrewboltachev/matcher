@@ -257,32 +257,23 @@ instance FromJSON a => FromJSON (VarDef a)
 
                   -- structures - object
 data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- delete
+                  | MatchObjectPartial (KeyMap (ObjectKeyMatch MatchPattern)) -- delete: fn
                   | MatchObjectWithDefaults (KeyMap MatchPattern) (KeyMap Value)
                   | MatchObjectOnly (KeyMap MatchPattern)
                   | MatchObjectOptional (KeyMap MatchPattern) (KeyMap MatchPattern)
                   | MatchObjectWhole (KeyMap MatchPattern)
                   | MatchRecord MatchPattern
-                  | MatchOmitField Key MatchPattern -- think
-                  | MatchSelectFields (V.Vector Key) MatchPattern -- think
-                  | MatchApply Key Value MatchPattern -- think
-                  | MatchFork (KeyMap MatchPattern) -- think
-                  | MatchObjectPartial (KeyMap (ObjectKeyMatch MatchPattern)) -- delete
                   -- structures - array
                   -- | MatchArrayAll MatchPattern
                   -- | MatchArraySome MatchPattern
                   -- | MatchArrayOne MatchPattern
                   -- | MatchArrayExact (V.Vector MatchPattern)
                   | MatchArrayContextFree (ContextFreeGrammar MatchPattern)
-                  | MatchArray MatchPattern -- think hard
                   | MatchArrayOnly MatchPattern -- bigger pattern???
-                  -- literals: match particular value of
+                  -- literals: regular
                   | MatchStringExact !T.Text
-                  | MatchStringToArray MatchPattern
-                  | MatchStringRegExp !T.Text
                   | MatchNumberExact !Sci.Scientific
                   | MatchBoolExact !Bool
-                  | MatchStringContextFree (ContextFreeGrammar Char)
-                  | MatchStringChars MatchPattern
                   -- literals: match any of
                   | MatchStringAny
                   | MatchNumberAny
@@ -291,8 +282,6 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchNull
                   -- conditions
                   | MatchAny
-                  | MatchNone
-                  | MatchDefault Value -- remove
                   | MatchOr (KeyMap MatchPattern)
                   | MatchNot MatchPattern
                   | MatchAnd MatchPattern MatchPattern -- need?
@@ -304,16 +293,33 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchFunnelKeysU -- remove?
                   -- special
                   | MatchRef T.Text
+                  -- physical
                   | MatchFromMongoDB T.Text T.Text MatchPattern -- not sure
                   | MatchFromRedis T.Text T.Text MatchPattern -- not sure
                   | MatchGetFromRedis T.Text T.Text MatchPattern -- not sure
                   | MatchGetFromIORef MatchPattern -- not sure
                   | MatchGetFromFile T.Text MatchPattern -- not sure
-                  -- advanced
+                  -- regular vars
                   | MatchLet (KeyMap MatchPattern) MatchPattern
                   | MatchVar T.Text
-                  -- process
-                  | MatchReplace MatchPattern MatchPattern
+                  -- regular vars: extension
+                  | MatchReplace MatchPattern MatchPattern -- XXX not done
+                  -- aliases
+                  | MatchArray MatchPattern -- think hard
+                  -- DEPRECATED
+                  -- functions (no result)
+                  | MatchOmitField Key MatchPattern -- think: fn
+                  | MatchSelectFields (V.Vector Key) MatchPattern -- think: fn
+                  | MatchApply Key Value MatchPattern -- think: fn
+                  | MatchFork (KeyMap MatchPattern) -- think: fn
+                  -- literals: string variants: deprecated
+                  | MatchStringToArray MatchPattern
+                  | MatchStringRegExp !T.Text
+                  | MatchStringContextFree (ContextFreeGrammar Char)
+                  | MatchStringChars MatchPattern
+                  -- extra: think
+                  | MatchNone
+                  | MatchDefault Value -- remove
                     deriving (Generic, Eq, Show)
 
 matchObjectFull' o = MatchObjectFull $ KM.map KeyReq o
@@ -365,28 +371,24 @@ instance FromJSON MatchPattern
                  -- structures - object
 data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKeyMatch MatchResult)) -- delete
                  | MatchObjectPartialResult (KeyMap MatchPattern) (KeyMap (ObjectKeyMatch MatchResult)) -- delete
-                 -- structures - array
-                 -- | MatchArrayAllResult (V.Vector MatchResult)
-                 -- | MatchArraySomeResult (V.Vector (ArrayValMatch MatchResult))
-                 -- | MatchArrayOneResult MatchResult
-                 -- | MatchArrayExactResult (V.Vector MatchResult)
                  | MatchObjectWithDefaultsResult (KeyMap MatchResult) (KeyMap Value) (KeyMap Value)
                  | MatchObjectOnlyResult (KeyMap MatchResult) (KeyMap Value)
                  | MatchObjectOptionalResult (KeyMap MatchResult) (KeyMap MatchResult)
                  | MatchObjectWholeResult (KeyMap MatchResult)
                  | MatchRecordResultValue (KeyMap MatchResult)
                  | MatchRecordResultEmpty MatchPattern
+                 -- structures - array
+                 -- | MatchArrayAllResult (V.Vector MatchResult)
+                 -- | MatchArraySomeResult (V.Vector (ArrayValMatch MatchResult))
+                 -- | MatchArrayOneResult MatchResult
+                 -- | MatchArrayExactResult (V.Vector MatchResult)
                  | MatchArrayContextFreeResult (ContextFreeGrammarResult MatchPattern MatchResult)
                  | MatchArrayOnlyResultEmpty MatchPattern (V.Vector Value)
                  | MatchArrayOnlyResultSome (V.Vector MatchResult) (V.Vector (Maybe Value))
-                 -- literals: match particular value of
+                 -- literals: regular
                  | MatchStringExactResult !T.Text
-                 | MatchStringToArrayResult MatchResult
-                 | MatchStringRegExpResult !T.Text !T.Text
                  | MatchNumberExactResult !Sci.Scientific
                  | MatchBoolExactResult !Bool
-                 | MatchStringContextFreeResult (ContextFreeGrammarResult Char Char)
-                 | MatchStringCharsResult MatchResult
                  -- literals: match any of
                  | MatchStringAnyResult !T.Text
                  | MatchNumberAnyResult !Sci.Scientific
@@ -395,8 +397,6 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  | MatchNullResult
                  -- conditions
                  | MatchAnyResult Value
-                 | MatchNoneResult Value
-                 | MatchDefaultResult Value
                  | MatchOrResult (KeyMap MatchPattern) Key MatchResult
                  | MatchNotResult MatchPattern Value
                  | MatchAndResult MatchResult MatchResult
@@ -409,10 +409,19 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  | MatchRefResult T.Text MatchResult
                  | MatchFromMongoDBResult T.Text T.Text T.Text
                  | MatchFromRedisResult T.Text T.Text T.Text
+                 -- DEPRECATED
                  -- advanced
                  | MatchLetResult (KeyMap MatchResult) MatchResult
                  | MatchLet2Result (KeyMap MatchResult) MatchResult
                  | MatchVarResult T.Text
+                 -- extra: think
+                 | MatchNoneResult Value
+                 | MatchDefaultResult Value
+                 -- literals: string variants: deprecated
+                 | MatchStringToArrayResult MatchResult
+                 | MatchStringRegExpResult !T.Text !T.Text -- deprecated
+                 | MatchStringContextFreeResult (ContextFreeGrammarResult Char Char)
+                 | MatchStringCharsResult MatchResult
                    deriving (Generic, Eq, Show)
 
 {-matchObjectWithDefaultsResultArbitrary = do
