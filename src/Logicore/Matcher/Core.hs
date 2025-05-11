@@ -399,7 +399,7 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  -- conditions
                  | MatchAnyResult Value
                  | MatchOrResult (KeyMap MatchPattern) Key MatchResult
-                 | MatchMeAndFriendsResult Key (KeyMap (V.Vector MatchResult)) (KeyMap (V.Vector Value)) (V.Vector Key)
+                 | MatchMeAndFriendsResult Key (KeyMap (V.Vector MatchResult)) (KeyMap (V.Vector Value)) (V.Vector Key) (KeyMap MatchPattern)
                  | MatchNotResult MatchPattern Value
                  | MatchAndResult MatchResult MatchResult
                  | MatchIfThenResult MatchPattern T.Text MatchResult
@@ -1080,22 +1080,21 @@ matchPattern' fa (MatchMeAndFriends k'' ms) (Array vs) = do
                                           Nothing -> Just [a]
                             KM.alterF ff k km
   let h acc' (i, e) = do
-        (as, bs, ks) <- acc'
+        (as, bs, ks, ws) <- acc'
         case e of
           (Object o) -> case KM.lookup k'' o of
               Just (String m') -> case KM.lookup (K.fromText m') ms of
                 Just mm -> MatchStatusT $ do
                              rr <- runMatchStatusT $ fa mm (Object o)
                              return $ case rr of
-                               MatchSuccess s -> MatchSuccess $ (appendToKey as (K.fromText m') s, bs, V.snoc ks (K.fromText m'))
+                               MatchSuccess s -> MatchSuccess $ (appendToKey as (K.fromText m') s, bs, V.snoc ks (K.fromText m'), KM.delete (K.fromText m') ws)
                                MatchFailure err -> MatchFailure err
                                NoMatch err -> NoMatch err
-                Nothing -> return $ (as, appendToKey bs (K.fromText m') e, V.snoc ks (K.fromText m'))
+                Nothing -> return $ (as, appendToKey bs (K.fromText m') e, V.snoc ks (K.fromText m'), ws)
               Nothing -> noMatch ("mismatch: MeAndFriends element with index " ++ (T.pack $ show i)  ++ ", doesn't have key " ++ (T.pack $ show k''))
           a' -> noMatch ("mismatch: MeAndFriends expected object, but found " ++ (T.pack $ show a'))
-  r <- L.foldl' h (return (KM.empty, KM.empty, V.empty)) (V.toList (V.zipWith (,) [0..] vs))
-  let (as, bs, ks) = r
-  return $ MatchMeAndFriendsResultF k'' as bs ks
+  (as, bs, ks, ws) <- L.foldl' h (return (KM.empty, KM.empty, V.empty, ms)) (V.toList (V.zipWith (,) [0..] vs))
+  return $ MatchMeAndFriendsResultF k'' as bs ks ws
 
 matchPattern' fa (MatchArray ms) (Array arr) = do
   matchPattern' fa (MatchArrayContextFree (Star $ Char ms)) (Array arr)
