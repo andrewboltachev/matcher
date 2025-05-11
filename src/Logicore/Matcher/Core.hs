@@ -2023,6 +2023,10 @@ contextFreeGrammarResultToThinValue a = do
 -- ghci> matchResultToThinValueI $ extract $ matchPatternI (MatchStringChars (MatchArrayContextFree (Seq [(Char (MatchStringExact "a")), (Star (Char (MatchStringExact "b")))]))) (String "abb")
 -- MatchSuccess (Just (Number 2.0))
 
+
+n2n (Just x) = x
+n2n Nothing = Null
+
 matchResultToThinValueFAlgebra :: MonadIO m => MatchResultF (Maybe Value) -> MatchStatusT s m (Maybe Value)
 matchResultToThinValueFAlgebra = goM
   where
@@ -2109,6 +2113,7 @@ matchResultToThinValueFAlgebra = goM
     go (MatchFunnelKeysResultF r) = Just $ Object r
     go (MatchFunnelKeysUResultF r) = Just $ Object r
     go (MatchRefResultF ref r) = r
+    go (MatchMeAndFriendsResultF k as bs ks ws) = Just $ Object (KM.map (Array . (fmap n2n)) as)
     --go x = error $ (T.pack $ show x)
     go (MatchObjectFullResultF _ _) = error "MatchObjectFullResultF"
     go (MatchObjectPartialResultF _ _) = error "MatchObjectPartialResultF"
