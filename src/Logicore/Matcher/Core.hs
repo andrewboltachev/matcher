@@ -1093,7 +1093,7 @@ matchPattern' fa (MatchMeAndFriends k'' ms) (Array vs) = do
                 Nothing -> return $ (as, appendToKey bs (K.fromText m') e, V.snoc ks (K.fromText m'), ws)
               Nothing -> noMatch ("mismatch: MeAndFriends element with index " ++ (T.pack $ show i)  ++ ", doesn't have key " ++ (T.pack $ show k''))
           a' -> noMatch ("mismatch: MeAndFriends expected object, but found " ++ (T.pack $ show a'))
-  (as, bs, ks, ws) <- L.foldl' h (return (KM.empty, KM.empty, V.empty, ms)) (V.toList (V.zipWith (,) [0..] vs))
+  (as, bs, ks, ws) <- L.foldl' h (return (KM.empty, KM.empty, V.empty, ms)) (P.zip [0..] (V.toList vs))
   return $ MatchMeAndFriendsResultF k'' as bs ks ws
 
 matchPattern' fa (MatchArray ms) (Array arr) = do
