@@ -1593,19 +1593,18 @@ matchResultToPattern = cata go where
 -- ghci> matchResultToValue $ extract $ matchPatternI (MatchStringChars (MatchArrayContextFree (Seq [(Char (MatchStringExact "a")), (Star (Char (MatchStringExact "b")))]))) (String "abb")
 -- String "abb"
 
-matchResultToValue = undefined
-{-matchResultToValue :: MonadIO m => MatchResult -> MatchStatusT (KeyMap Value) m Value
+matchResultToValue :: MonadIO m => MatchResult -> MatchStatusT (KeyMap Value) m Value
 matchResultToValue = paraM goM
   where
     goM :: MonadIO m => MatchResultF (MatchResult, Value) -> MatchStatusT (KeyMap Value) m Value
-    goM (MatchLetResultF m (a, _)) = do
-      modifyMatcherState regularVars (KM.union (KM.map snd m))
-      matchResultToValue a
-    goM (MatchVarResultF n) = do
-      vars <- getMatcherState regularVars
-      liftIO $ print vars
-      let value = fromJust $ KM.lookup (K.fromText n) vars
-      return $ value
+    --goM (MatchLetResultF m (a, _)) = do
+    --  modifyMatcherState regularVars (KM.union (KM.map snd m))
+    --  matchResultToValue a
+    --goM (MatchVarResultF n) = do
+    --  vars <- getMatcherState regularVars
+    --  liftIO $ print vars
+    --  let value = fromJust $ KM.lookup (K.fromText n) vars
+    --  return $ value
     goM (MatchStringToArrayResultF r) = do
       r' <- case r of
               (_, Array r') -> return $ r'
@@ -1617,6 +1616,16 @@ matchResultToValue = paraM goM
                                 _ -> matchFailure $ "must be string here"
       s <- L.foldl' f (return mempty) r
       return $ String s
+    goM (MatchMeAndFriendsResultF k as bs ks _) = do
+        let u = KM.union ((KM.map . fmap) snd as) bs
+        let f acc' e = do
+              (uu, aa) <- acc'
+              case KM.lookup e uu of
+                Just v -> case V.uncons v of
+                            Just (hd, tl) -> return (KM.insert e tl uu, V.snoc aa hd)
+                Nothing -> noMatch $ "MeAndFriends key not found: " ++ (K.toText e)
+        (u', r) <- V.foldl f (return $ (u, V.empty)) ks
+        return $ Array r
     goM x = do
       return $ go $ fmap snd x
     stringResultToSource (Array a) = V.foldl f "" a where
@@ -1664,7 +1673,8 @@ matchResultToValue = paraM goM
     go (MatchFunnelResultF r) = r
     go (MatchFunnelKeysResultF r) = Object r
     go (MatchFunnelKeysUResultF r) = Object r
-    go (MatchRefResultF ref r) = r-}
+    go (MatchRefResultF ref r) = r
+        
 
 --matchResultToValue :: MatchResult -> Value
 --matchResultToValue r = runIdentity $ evalStateT (matchResultToValue' r) KM.empty
