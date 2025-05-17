@@ -287,6 +287,7 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchAnd MatchPattern MatchPattern -- need?
                   | MatchArrayOr (KeyMap MatchPattern) -- need?
                   | MatchMeAndFriends Key (KeyMap MatchPattern)
+                  | MatchTranspose MatchPattern MatchPattern -- fn
                   | MatchIfThen MatchPattern T.Text MatchPattern
                   -- funnel
                   | MatchFunnel
@@ -399,6 +400,7 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  -- conditions
                  | MatchAnyResult Value
                  | MatchOrResult (KeyMap MatchPattern) Key MatchResult
+                 | MatchTransposeResult MatchResult (V.Vector Key)
                  | MatchMeAndFriendsResult Key (KeyMap (V.Vector MatchResult)) (KeyMap (V.Vector Value)) (V.Vector Key) (KeyMap MatchPattern)
                  | MatchNotResult MatchPattern Value
                  | MatchAndResult MatchResult MatchResult
@@ -1095,6 +1097,25 @@ matchPattern' fa (MatchMeAndFriends k'' ms) (Array vs) = do
           a' -> noMatch ("mismatch: MeAndFriends expected object, but found " ++ (T.pack $ show a'))
   (as, bs, ks, ws) <- L.foldl' h (return (KM.empty, KM.empty, V.empty, ms)) (P.zip [0..] (V.toList vs))
   return $ MatchMeAndFriendsResultF k'' as bs ks ws
+
+matchPattern' fa (MatchTranspose key pattern) (Array vs) = do
+  let appendToKey km k a = runIdentity $ do
+                            let ff vv = Identity $ case vv of
+                                          (Just v) -> Just $ V.snoc v a
+                                          Nothing -> Just [a]
+                            KM.alterF ff k km
+  let h :: (Show r, MonadIO m) => MatchStatusT (VarsDef r) m (KeyMap Value, V.Vector Key)
+                                   -> (Integer, Value)
+                                   -> MatchStatusT (VarsDef r) m (KeyMap Value, V.Vector Key)
+      h acc' (i, e) = do
+        (as, ks) <- acc'
+        --keyMatch <- lift $ lift $ lift $ matchToThin key e
+        --case keyMatch of
+        --  _ -> undefined
+        undefined
+  (value, ks) <- L.foldl' h (return (KM.empty, V.empty)) (P.zip [0..] (V.toList vs))
+  result <- fa pattern (Object value)
+  return $ MatchTransposeResultF result ks
 
 matchPattern' fa (MatchArray ms) (Array arr) = do
   matchPattern' fa (MatchArrayContextFree (Star $ Char ms)) (Array arr)
