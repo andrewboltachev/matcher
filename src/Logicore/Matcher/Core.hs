@@ -1104,17 +1104,21 @@ matchPattern' fa (MatchTranspose key pattern) (Array vs) = do
                                           (Just v) -> Just $ V.snoc v a
                                           Nothing -> Just [a]
                             KM.alterF ff k km
-  let h :: (Show r, MonadIO m) => MatchStatusT (VarsDef r) m (KeyMap Value, V.Vector Key)
+  let h :: (Show r, MonadIO m) => MatchStatusT (VarsDef r) m (KeyMap (V.Vector Value), V.Vector Key)
                                    -> (Integer, Value)
-                                   -> MatchStatusT (VarsDef r) m (KeyMap Value, V.Vector Key)
+                                   -> MatchStatusT (VarsDef r) m (KeyMap (V.Vector Value), V.Vector Key)
       h acc' (i, e) = do
         (as, ks) <- acc'
-        --keyMatch <- lift $ lift $ lift $ matchToThin key e
-        --case keyMatch of
-        --  _ -> undefined
-        undefined
+        matcherEnv <- asksMatcherEnv id
+        keyMatch <- liftIO $ runReaderT (evalStateT (runMatchStatusT $ matchToThin key e) (VarsDef KM.empty)) matcherEnv
+        k <- case keyMatch of
+            MatchSuccess (Just (String s)) -> return $ K.fromText s
+            MatchSuccess s -> noMatch $ "got not a single string as a key for MatchTranspose: " ++ (T.pack . show) s
+            MatchFailure f -> matchFailure $ "MatchTranspose key check fail: " ++ f
+            NoMatch f -> noMatch $ "MatchTranspose key check fail: " ++ f
+        return $ (appendToKey as k e, V.snoc ks k)
   (value, ks) <- L.foldl' h (return (KM.empty, V.empty)) (P.zip [0..] (V.toList vs))
-  result <- fa pattern (Object value)
+  result <- fa pattern (Object $ KM.map Array $ value)
   return $ MatchTransposeResultF result ks
 
 matchPattern' fa (MatchArray ms) (Array arr) = do
@@ -1188,6 +1192,7 @@ matchPattern' fa (MatchFromRedis db collection r) v = do
   -- ReaderT MatcherEnv m (MatchStatus a)
   -- runReaderT
   -- MatcherEnv -> m (MatchStatus a)
+  woo <- lift $ asks redisConn
   conn <- MatchStatusT $ do
     a <- asks redisConn
     return $ (return a)
