@@ -260,6 +260,7 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   | MatchObjectPartial (KeyMap (ObjectKeyMatch MatchPattern)) -- delete: fn
                   | MatchObjectWithDefaults (KeyMap MatchPattern) (KeyMap Value)
                   | MatchObjectOnly (KeyMap MatchPattern)
+                  | MatchDefaultedOnly (KeyMap Value) (KeyMap MatchPattern)
                   | MatchObjectOptional (KeyMap MatchPattern) (KeyMap MatchPattern)
                   | MatchObjectWhole (KeyMap MatchPattern)
                   | MatchRecord MatchPattern
@@ -322,6 +323,7 @@ data MatchPattern = MatchObjectFull (KeyMap (ObjectKeyMatch MatchPattern)) -- de
                   -- extra: think
                   | MatchNone
                   | MatchDefault Value -- remove
+                  | MatchThinFlatten MatchPattern
                     deriving (Generic, Eq, Show)
 
 matchObjectFull' o = MatchObjectFull $ KM.map KeyReq o
@@ -400,7 +402,7 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  -- conditions
                  | MatchAnyResult Value
                  | MatchOrResult (KeyMap MatchPattern) Key MatchResult
-                 | MatchTransposeResult MatchResult (V.Vector Key)
+                 | MatchTransposeResult MatchPattern MatchResult (V.Vector Key)
                  | MatchMeAndFriendsResult Key (KeyMap (V.Vector MatchResult)) (KeyMap (V.Vector Value)) (V.Vector Key) (KeyMap MatchPattern)
                  | MatchNotResult MatchPattern Value
                  | MatchAndResult MatchResult MatchResult
@@ -426,6 +428,7 @@ data MatchResult = MatchObjectFullResult (KeyMap MatchPattern) (KeyMap (ObjectKe
                  | MatchStringRegExpResult !T.Text !T.Text -- deprecated
                  | MatchStringContextFreeResult (ContextFreeGrammarResult Char Char)
                  | MatchStringCharsResult MatchResult
+                 | MatchThinFlattenResult MatchResult
                    deriving (Generic, Eq, Show)
 
 {-matchObjectWithDefaultsResultArbitrary = do
@@ -770,6 +773,7 @@ gatherFunnelFAlgebra (MatchOrResultF g k r) = return $ r
 gatherFunnelFAlgebra (MatchNotResultF g r) = return $ V.empty
 gatherFunnelFAlgebra (MatchAndResultF r' r) = return $ r' V.++ r
 gatherFunnelFAlgebra (MatchIfThenResultF _ _ r) = return $ r
+gatherFunnelFAlgebra (MatchTransposeResultF _ r _) = return $ r
 gatherFunnelFAlgebra (MatchFunnelResultF r) = return $ V.singleton r
 gatherFunnelFAlgebra (MatchFunnelKeysResultF m) = return $ V.fromList $ fmap k2s (KM.keys m)
 gatherFunnelFAlgebra (MatchFunnelKeysUResultF m) = error "not implemented" -- return $ unique $ fmap k2s (KM.keys m) -- TODO what idea?
@@ -898,6 +902,11 @@ matchPattern' fa (MatchObjectOnly m) (Object a) = do
   mm <- L.foldl' f (return mempty) $ KM.toList m
   vv <- return $ (KM.filterWithKey (\k _ -> not $ KM.member k m)) a
   return $ MatchObjectOnlyResultF mm vv
+
+
+matchPattern' fa (MatchDefaultedOnly d m) (Object a) = do
+  -- TODO proper
+  matchPattern' fa (MatchObjectOnly m) (Object (KM.union a d))
 
 
 matchPattern' fa (MatchObjectOptional m o) (Object a) = do
@@ -1119,7 +1128,7 @@ matchPattern' fa (MatchTranspose key pattern) (Array vs) = do
         return $ (appendToKey as k e, V.snoc ks k)
   (value, ks) <- L.foldl' h (return (KM.empty, V.empty)) (P.zip [0..] (V.toList vs))
   result <- fa pattern (Object $ KM.map Array $ value)
-  return $ MatchTransposeResultF result ks
+  return $ MatchTransposeResultF key result ks
 
 matchPattern' fa (MatchArray ms) (Array arr) = do
   matchPattern' fa (MatchArrayContextFree (Star $ Char ms)) (Array arr)
@@ -1332,6 +1341,11 @@ matchPattern' fa (MatchVar n) a = do
 matchPattern' fa (MatchReplace m' m'') a = do
   undefined
 
+
+matchPattern' fa (MatchThinFlatten m) a = do
+  r <- fa m a
+  return $ MatchThinFlattenResultF r
+
 -- default ca
 matchPattern' fa m a = noMatch ("bottom reached:\n" ++ (T.pack $ show m) ++ "\n" ++ (T.pack $ show a))
 
@@ -1354,6 +1368,11 @@ traceFAlgebra x = do
 -- TODO: better playaround with recursion schemes
 matchToFunnel :: MonadIO m => MatchPattern -> Value -> MatchStatusT (VarsDef (V.Vector Value)) m (V.Vector Value)
 matchToFunnel = matchPattern'' gatherFunnelFAlgebra
+matchToFunnel''' p v = do
+  case matchPatternI p v of
+    MatchSuccess s -> gatherFunnel' s
+    MatchFailure f -> matchFailure f
+    NoMatch f -> noMatch f
 
 shortenText :: T.Text -> T.Text
 shortenText x = if T.length x > 50
@@ -1972,6 +1991,7 @@ matchPatternIsMovable = cataM goM
     go MatchFunnelF = True
     go MatchFunnelKeysF = True
     go MatchFunnelKeysUF = True
+    go (MatchTransposeF k as) = True -- TODO
 
 isKeyReq (KeyReq _) = True
 isKeyReq _ = False
@@ -2084,7 +2104,7 @@ matchResultToThinValueFAlgebra = goM
       where
         f (KeyReq v) = v
         f (KeyOpt v) = case v of
-                            Nothing -> Just $ Bool True
+                            Nothing -> Just $ Null
                             Just a -> Just $ a
         f (KeyExt _) = error "must not be here5"
         ff (KeyReq v) = True
@@ -2110,6 +2130,18 @@ matchResultToThinValueFAlgebra = goM
       return $ Just $ case gg of
             True -> Object $ KM.empty
             False -> Array $ []
+    goM (MatchThinFlattenResultF r) = case r of
+        Nothing -> return $ Nothing
+        Just (Array a) -> do
+          let f acc' e = do
+                          acc <- acc'
+                          case e of
+                            Array c -> return $ V.concat [acc, c]
+                            _ -> matchFailure $ "got not an array of arrays to flatten" ++ (T.pack $ show $ e)
+          rr <- V.foldl f (return $ V.empty) a
+          return $ Just $ Array rr
+        Just e -> matchFailure $ "got not an array of arrays to flatten: " ++ (T.pack $ show $ e)
+        
     goM x = return $ go x
 
     go :: MatchResultF (Maybe Value) -> Maybe Value
@@ -2140,6 +2172,7 @@ matchResultToThinValueFAlgebra = goM
     go (MatchFunnelKeysUResultF r) = Just $ Object r
     go (MatchRefResultF ref r) = r
     go (MatchMeAndFriendsResultF k as bs ks ws) = Just $ Object (KM.map (Array . (fmap n2n)) as)
+    go (MatchTransposeResultF k as ks) = as
     --go x = error $ (T.pack $ show x)
     go (MatchObjectFullResultF _ _) = error "MatchObjectFullResultF"
     go (MatchObjectPartialResultF _ _) = error "MatchObjectPartialResultF"
